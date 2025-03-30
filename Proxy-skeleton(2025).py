@@ -16,9 +16,10 @@ args = parser.parse_args()
 proxyHost = args.hostname
 proxyPort = int(args.port)
 
-# Create a server socket, bind it to a port and start listening
+# Create a server socket, bind it to a port and start listening, this is a test commit
 try:
   # Create a server socket
+  serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   # ~~~~ INSERT CODE ~~~~
   # ~~~~ END CODE INSERT ~~~~
   print ('Created socket')
