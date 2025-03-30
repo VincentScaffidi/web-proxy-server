@@ -4,7 +4,6 @@ import sys
 import os
 import argparse
 import re
-import time
 
 # 1MB buffer size
 BUFFER_SIZE = 1000000
@@ -121,26 +120,28 @@ while True:
     # ProxyServer finds a cache hit
     # Send back response to client 
     # ~~~~ INSERT CODE ~~~~
+    import time
+    # Check max-age in cached response
     cache_control = None
     for line in cacheData:
-      if line.lower().startswith('cache-control:'):
-          cache_control = line
-          break
+        if line.lower().startswith('cache-control:'):
+            cache_control = line
+            break
 
     max_age = 0
     if cache_control:
-      match = re.search(r'max-age=(\d+)', cache_control, re.IGNORECASE)
-      if match:
-        max_age = int(match.group(1))
+        match = re.search(r'max-age=(\d+)', cache_control, re.IGNORECASE)
+        if match:
+            max_age = int(match.group(1))
 
     # Validate cache freshness
     file_age = time.time() - os.path.getmtime(cacheLocation)
     if max_age > 0 and file_age > max_age:
-      raise Exception("Cache expired")
+        raise Exception("Cache expired")
 
     # Send cached response
     for line in cacheData:
-      clientSocket.send(line.encode())
+        clientSocket.send(line.encode())
     # ~~~~ END CODE INSERT ~~~~
     cacheFile.close()
     print ('Sent to the client:')
@@ -204,6 +205,21 @@ while True:
               break
           response_bytes += data
 
+      # Decode chunked encoding if present
+      if b'Transfer-Encoding: chunked' in response_bytes:
+          chunks = []
+          while True:
+              chunk_size_line, _, rest = response_bytes.partition(b'\r\n')
+              if not chunk_size_line:
+                  break
+              chunk_size = int(chunk_size_line, 16)
+              if chunk_size == 0:
+                  break
+              chunk, _, rest = rest.partition(b'\r\n')
+              chunks.append(chunk[:chunk_size])
+              response_bytes = rest
+          response_bytes = b''.join(chunks)
+
       # Check for redirects (301/302)
       response_str = response_bytes.decode('utf-8', errors='ignore')
       status_line = response_str.split('\r\n')[0]
@@ -215,6 +231,7 @@ while True:
                   new_url = location_header[0].split(' ', 1)[1].strip()
                   URI = new_url  # Update URI to follow redirect
                   break  # Exit loop to reprocess the new URI
+
       # ~~~~ END CODE INSERT ~~~~ check
 
       # Send the response to the client
