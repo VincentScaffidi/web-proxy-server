@@ -4,6 +4,7 @@ import sys
 import os
 import argparse
 import re
+import time
 
 # 1MB buffer size
 BUFFER_SIZE = 1000000
@@ -120,6 +121,24 @@ while True:
     # ProxyServer finds a cache hit
     # Send back response to client 
     # ~~~~ INSERT CODE ~~~~
+    cache_control = None
+    for line in cacheData:
+      if line.lower().startswith('cache-control:'):
+          cache_control = line
+          break
+
+    max_age = 0
+    if cache_control:
+      match = re.search(r'max-age=(\d+)', cache_control, re.IGNORECASE)
+      if match:
+        max_age = int(match.group(1))
+
+    # Validate cache freshness
+    file_age = time.time() - os.path.getmtime(cacheLocation)
+    if max_age > 0 and file_age > max_age:
+      raise Exception("Cache expired")
+
+    # Send cached response
     for line in cacheData:
       clientSocket.send(line.encode())
     # ~~~~ END CODE INSERT ~~~~
