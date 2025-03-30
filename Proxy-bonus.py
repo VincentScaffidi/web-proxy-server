@@ -4,11 +4,12 @@ import sys
 import os
 import argparse
 import re
-import time
+# Add these imports at the top
 from email.utils import parsedate_to_datetime
 import threading
+import datetime
 
-# 1MB buffer sizer
+# 1MB buffer size
 BUFFER_SIZE = 1000000
 
 # Get the IP address and Port number to use for this web proxy server
@@ -95,9 +96,16 @@ while True:
   URI = URI.replace('/..', '')
 
   # Split hostname from resource name
+  # Split hostname:port and resource
   resourceParts = URI.split('/', 1)
-  hostname = resourceParts[0]
-  resource = '/'
+  if ':' in resourceParts[0]:
+      hostname, port = resourceParts[0].split(':', 1)
+      port = int(port)
+  else:
+      hostname = resourceParts[0]
+      port = 80  # Default to port 80
+
+  resource = '/' + resourceParts[1] if len(resourceParts) > 1 else '/'
 
   if len(resourceParts) == 2:
     # Resource is absolute URI with hostname and resource
@@ -123,28 +131,8 @@ while True:
     # ProxyServer finds a cache hit
     # Send back response to client 
     # ~~~~ INSERT CODE ~~~~
-    import time
-    # Check max-age in cached response
-    cache_control = None
     for line in cacheData:
-        if line.lower().startswith('cache-control:'):
-            cache_control = line
-            break
-
-    max_age = 0
-    if cache_control:
-        match = re.search(r'max-age=(\d+)', cache_control, re.IGNORECASE)
-        if match:
-            max_age = int(match.group(1))
-
-    # Validate cache freshness
-    file_age = time.time() - os.path.getmtime(cacheLocation)
-    if max_age > 0 and file_age > max_age:
-        raise Exception("Cache expired")
-
-    # Send cached response
-    for line in cacheData:
-        clientSocket.send(line.encode())
+      clientSocket.send(line.encode())
     # ~~~~ END CODE INSERT ~~~~
     cacheFile.close()
     print ('Sent to the client:')
@@ -175,12 +163,8 @@ while True:
       # originServerRequest is the first line in the request and
       # originServerRequestHeader is the second line in the request
       # ~~~~ INSERT CODE ~~~~
-      # Extract headers from client request (except Host)
-      client_headers = message.split('\r\n\r\n')[0].split('\r\n')[1:]
-      filtered_headers = [h for h in client_headers if not h.lower().startswith('host:')]
-
       originServerRequest = method + " " + resource + " HTTP/1.1"
-      originServerRequestHeader = "Host: " + hostname + '\r\n' + '\r\n'.join(filtered_headers)
+      originServerRequestHeader = "Host: " + hostname
       # ~~~~ END CODE INSERT ~~~~
 
       # Construct the request to send to the origin server
@@ -204,36 +188,10 @@ while True:
       response_bytes = b""
       while True:
           data = originServerSocket.recv(BUFFER_SIZE)
-          if not data:
+          if len(data) > 0:
+              response_bytes += data
+          else:
               break
-          response_bytes += data
-
-      # Decode chunked encoding if present
-      if b'Transfer-Encoding: chunked' in response_bytes:
-          chunks = []
-          while True:
-              chunk_size_line, _, rest = response_bytes.partition(b'\r\n')
-              if not chunk_size_line:
-                  break
-              chunk_size = int(chunk_size_line, 16)
-              if chunk_size == 0:
-                  break
-              chunk, _, rest = rest.partition(b'\r\n')
-              chunks.append(chunk[:chunk_size])
-              response_bytes = rest
-          response_bytes = b''.join(chunks)
-
-      # Check for redirects (301/302)
-      response_str = response_bytes.decode('utf-8', errors='ignore')
-      status_line = response_str.split('\r\n')[0]
-      if status_line:
-          status_code = int(status_line.split()[1])
-          if status_code in (301, 302):
-              location_header = [line for line in response_str.split('\r\n') if line.lower().startswith('location:')]
-              if location_header:
-                  new_url = location_header[0].split(' ', 1)[1].strip()
-                  URI = new_url  # Update URI to follow redirect
-                  break  # Exit loop to reprocess the new URI
 
       # ~~~~ END CODE INSERT ~~~~ check
 
