@@ -124,8 +124,34 @@ while True:
     fileExists = os.path.isfile(cacheLocation)
     
     # Check wether the file is currently in the cache
-    cacheFile = open(cacheLocation, "r")
-    cacheData = cacheFile.readlines()
+    cache_valid = True
+    try:
+        with open(cacheLocation, 'r') as f:
+            content = f.read()
+        
+        # Check max-age
+        max_age_match = re.search(r'Cache-Control:.*?max-age=(\d+)', content, re.IGNORECASE)
+        if max_age_match:
+            max_age = int(max_age_match.group(1))
+            file_age = time.time() - os.path.getmtime(cacheLocation)
+            if file_age > max_age:
+                cache_valid = False
+        
+        # Check Expires header
+        expires_match = re.search(r'Expires: (.+)', content, re.IGNORECASE)
+        if expires_match:
+            expires_str = expires_match.group(1).strip()
+            expires_dt = parsedate_to_datetime(expires_str)
+            if datetime.datetime.now(datetime.timezone.utc) > expires_dt:
+                cache_valid = False
+        
+        if not cache_valid:
+            print("Cache expired. Fetching from origin.")
+            raise Exception("Cache expired")
+        
+        cacheData = content.splitlines(keepends=True)
+    except:
+        raise Exception("Cache invalid")
 
     print ('Cache hit! Loading from cache file: ' + cacheLocation)
     # ProxyServer finds a cache hit
@@ -152,7 +178,7 @@ while True:
       address = socket.gethostbyname(hostname)
       # Connect to the origin server
       # ~~~~ INSERT CODE ~~~~
-      originServerSocket.connect((address, 80))
+      originServerSocket.connect((address, port))  # Use parsed port
       # ~~~~ END CODE INSERT ~~~~
       print ('Connected to origin Server')
 
