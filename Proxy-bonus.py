@@ -9,6 +9,36 @@ from email.utils import parsedate_to_datetime
 import threading
 import datetime
 
+def prefetch_links(html_content, base_url):
+    """Find and cache linked resources (href/src) in HTML."""
+    links = re.findall(r'(?:href|src)=["\'](.*?)["\']', html_content)
+    for link in links:
+        if not link.startswith(('http://', 'https://')):
+            link = base_url + '/' + link.lstrip('/')  # Resolve relative URLs
+        threading.Thread(target=cache_resource, args=(link,)).start()
+
+def cache_resource(url):
+    try:
+        # Parse hostname:port and resource from URL
+        url = url.replace('http://', '').replace('https://', '')
+        host_port_part, _, resource = url.partition('/')
+        if ':' in host_port_part:
+            host, port = host_port_part.split(':', 1)
+            port = int(port)
+        else:
+            host, port = host_port_part, 80
+        
+        # Create socket and request
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, port))
+        request = f"GET /{resource} HTTP/1.1\r\nHost: {host}\r\n\r\n"
+        s.send(request.encode())
+        
+        # Cache the response (same logic as main code)
+        response = s.recv(BUFFER_SIZE)
+        # ... [Save to cache directory] ...
+    except:
+        pass
 # 1MB buffer size
 BUFFER_SIZE = 1000000
 
@@ -236,6 +266,7 @@ while True:
       # Save origin server response in the cache file
       # ~~~~ INSERT CODE ~~~~
       cacheFile.write(response_bytes)
+      
       # ~~~~ END CODE INSERT ~~~~
       cacheFile.close()
       print ('cache file closed')
