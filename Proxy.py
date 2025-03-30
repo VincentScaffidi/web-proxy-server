@@ -152,8 +152,12 @@ while True:
       # originServerRequest is the first line in the request and
       # originServerRequestHeader is the second line in the request
       # ~~~~ INSERT CODE ~~~~
+      # Extract headers from client request (except Host)
+      client_headers = message.split('\r\n\r\n')[0].split('\r\n')[1:]
+      filtered_headers = [h for h in client_headers if not h.lower().startswith('host:')]
+
       originServerRequest = method + " " + resource + " HTTP/1.1"
-      originServerRequestHeader = "Host: " + hostname
+      originServerRequestHeader = "Host: " + hostname + '\r\n' + '\r\n'.join(filtered_headers)
       # ~~~~ END CODE INSERT ~~~~
 
       # Construct the request to send to the origin server
@@ -177,11 +181,21 @@ while True:
       response_bytes = b""
       while True:
           data = originServerSocket.recv(BUFFER_SIZE)
-          if len(data) > 0:
-              response_bytes += data
-          else:
+          if not data:
               break
+          response_bytes += data
 
+      # Check for redirects (301/302)
+      response_str = response_bytes.decode('utf-8', errors='ignore')
+      status_line = response_str.split('\r\n')[0]
+      if status_line:
+          status_code = int(status_line.split()[1])
+          if status_code in (301, 302):
+              location_header = [line for line in response_str.split('\r\n') if line.lower().startswith('location:')]
+              if location_header:
+                  new_url = location_header[0].split(' ', 1)[1].strip()
+                  URI = new_url  # Update URI to follow redirect
+                  break  # Exit loop to reprocess the new URI
       # ~~~~ END CODE INSERT ~~~~ check
 
       # Send the response to the client
