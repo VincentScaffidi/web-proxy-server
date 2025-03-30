@@ -8,6 +8,7 @@ import re
 from email.utils import parsedate_to_datetime
 import threading
 import datetime
+import time
 
 def prefetch_links(html_content, base_url):
     """Find and cache linked resources (href/src) in HTML."""
@@ -266,7 +267,11 @@ while True:
       # Save origin server response in the cache file
       # ~~~~ INSERT CODE ~~~~
       cacheFile.write(response_bytes)
-      
+      if 'text/html' in response_bytes.decode('utf-8', errors='ignore'):
+        prefetch_links(
+          response_bytes.decode('utf-8', errors='ignore').split('\r\n\r\n', 1)[1],
+          f"http://{hostname}"
+        )
       # ~~~~ END CODE INSERT ~~~~
       cacheFile.close()
       print ('cache file closed')
