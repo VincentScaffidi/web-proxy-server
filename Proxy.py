@@ -4,7 +4,6 @@ import sys
 import os
 import argparse
 import re
-import time
 
 # 1MB buffer size
 BUFFER_SIZE = 1000000
@@ -17,10 +16,12 @@ args = parser.parse_args()
 proxyHost = args.hostname
 proxyPort = int(args.port)
 
-# Create a server socket, bind it to a port and start listening
+# Create a server socket, bind it to a port and start listening, this is a test commit
 try:
   # Create a server socket
   serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  # ~~~~ INSERT CODE ~~~~
+  # ~~~~ END CODE INSERT ~~~~
   print ('Created socket')
 except:
   print ('Failed to create socket')
@@ -28,8 +29,11 @@ except:
 
 try:
   # Bind the the server socket to a host and port
+  # ~~~~ INSERT CODE ~~~~
+  # Under "Bind the the server socket to a host and port"
   serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   serverSocket.bind((proxyHost, proxyPort))
+  # ~~~~ END CODE INSERT ~~~~
   print ('Port is bound')
 except:
   print('Port is already in use')
@@ -37,7 +41,9 @@ except:
 
 try:
   # Listen on the server socket
+  # ~~~~ INSERT CODE ~~~~
   serverSocket.listen(5)
+  # ~~~~ END CODE INSERT ~~~~
   print ('Listening to socket')
 except:
   print ('Failed to listen')
@@ -50,26 +56,25 @@ while True:
 
   # Accept connection from client and store in the clientSocket
   try:
+    # ~~~~ INSERT CODE ~~~~
     clientSocket, addr = serverSocket.accept()
-    print ('Received a connection from:', addr)
+    # ~~~~ END CODE INSERT ~~~~
+    print ('Received a connection')
   except:
     print ('Failed to accept connection')
     sys.exit()
 
   # Get HTTP request from client
   # and store it in the variable: message_bytes
+  # ~~~~ INSERT CODE ~~~~
   message_bytes = clientSocket.recv(BUFFER_SIZE)
+  # ~~~~ END CODE INSERT ~~~~
   message = message_bytes.decode('utf-8')
   print ('Received request:')
   print ('< ' + message)
 
   # Extract the method, URI and version of the HTTP client request 
   requestParts = message.split()
-  if len(requestParts) < 3:
-    print('Invalid HTTP request')
-    clientSocket.close()
-    continue
-    
   method = requestParts[0]
   URI = requestParts[1]
   version = requestParts[2]
@@ -107,57 +112,73 @@ while True:
 
     fileExists = os.path.isfile(cacheLocation)
     
-    if not fileExists:
-        raise FileNotFoundError("Cache file not found")
-    
-    # Get file modification time to check if cache is fresh
-    mod_time = os.path.getmtime(cacheLocation)
-    current_time = time.time()
-    
-    # Read the file content
-    with open(cacheLocation, "rb") as cacheFile:
-        cache_content = cacheFile.read()
-    
-    # Check for max-age directive in cached response
-    cache_control_match = re.search(rb'Cache-Control:.*?max-age=(\d+)', cache_content, re.IGNORECASE)
-    if cache_control_match:
-        max_age = int(cache_control_match.group(1))
-        cache_age = current_time - mod_time
-        
-        # If cache is stale, raise exception to trigger cache miss handling
-        if cache_age > max_age and max_age > 0:
-            print(f"Cache is stale. Age: {cache_age}s, Max-Age: {max_age}s")
-            raise FileNotFoundError("Cache is stale")
+    # Check wether the file is currently in the cache
+    cacheFile = open(cacheLocation, "r")
+    cacheData = cacheFile.readlines()
 
     print ('Cache hit! Loading from cache file: ' + cacheLocation)
     # ProxyServer finds a cache hit
     # Send back response to client 
-    clientSocket.sendall(cache_content)
-    
-    print ('Sent cached content to the client')
-  except Exception as e:
+    # ~~~~ INSERT CODE ~~~~
+    import time
+    # Check max-age in cached response
+    cache_control = None
+    for line in cacheData:
+        if line.lower().startswith('cache-control:'):
+            cache_control = line
+            break
+
+    max_age = 0
+    if cache_control:
+        match = re.search(r'max-age=(\d+)', cache_control, re.IGNORECASE)
+        if match:
+            max_age = int(match.group(1))
+
+    # Validate cache freshness
+    file_age = time.time() - os.path.getmtime(cacheLocation)
+    if max_age > 0 and file_age > max_age:
+        raise Exception("Cache expired")
+
+    # Send cached response
+    for line in cacheData:
+        clientSocket.send(line.encode())
+    # ~~~~ END CODE INSERT ~~~~
+    cacheFile.close()
+    print ('Sent to the client:')
+    print ('> ' + cacheData)
+  except:
     # cache miss.  Get resource from origin server
-    print(f"Cache miss: {str(e)}")
     originServerSocket = None
     # Create a socket to connect to origin server
     # and store in originServerSocket
+    # ~~~~ INSERT CODE ~~~~
     originServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # ~~~~ END CODE INSERT ~~~~
 
     print ('Connecting to:\t\t' + hostname + '\n')
     try:
       # Get the IP address for a hostname
       address = socket.gethostbyname(hostname)
       # Connect to the origin server
+      # ~~~~ INSERT CODE ~~~~
       originServerSocket.connect((address, 80))
-      originServerSocket.settimeout(10)  # Set timeout to prevent hanging
+      # ~~~~ END CODE INSERT ~~~~
       print ('Connected to origin Server')
 
       originServerRequest = ''
       originServerRequestHeader = ''
       # Create origin server request line and headers to send
       # and store in originServerRequestHeader and originServerRequest
+      # originServerRequest is the first line in the request and
+      # originServerRequestHeader is the second line in the request
+      # ~~~~ INSERT CODE ~~~~
+      # Extract headers from client request (except Host)
+      client_headers = message.split('\r\n\r\n')[0].split('\r\n')[1:]
+      filtered_headers = [h for h in client_headers if not h.lower().startswith('host:')]
+
       originServerRequest = method + " " + resource + " HTTP/1.1"
-      originServerRequestHeader = "Host: " + hostname + "\r\nConnection: close"
+      originServerRequestHeader = "Host: " + hostname + '\r\n' + '\r\n'.join(filtered_headers)
+      # ~~~~ END CODE INSERT ~~~~
 
       # Construct the request to send to the origin server
       request = originServerRequest + '\r\n' + originServerRequestHeader + '\r\n\r\n'
@@ -171,58 +192,66 @@ while True:
         originServerSocket.sendall(request.encode())
       except socket.error:
         print ('Forward request to origin failed')
-        clientSocket.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\nFailed to send request to origin server")
-        clientSocket.close()
-        originServerSocket.close()
-        continue
+        sys.exit()
 
       print('Request sent to origin server\n')
 
       # Get the response from the origin server
+      # ~~~~ INSERT CODE ~~~~
       response_bytes = b""
       while True:
-          try:
-              data = originServerSocket.recv(BUFFER_SIZE)
-              if len(data) == 0:
-                  break
-              response_bytes += data
-          except socket.timeout:
-              print("Connection to origin server timed out")
-              if len(response_bytes) == 0:
-                  clientSocket.sendall(b"HTTP/1.1 504 Gateway Timeout\r\n\r\nConnection to origin server timed out")
-                  clientSocket.close()
-                  originServerSocket.close()
-                  continue
+          data = originServerSocket.recv(BUFFER_SIZE)
+          if not data:
               break
+          response_bytes += data
 
-      # Check if it's a redirect response
-      is_redirect = False
-      if b'HTTP/1.1 301' in response_bytes[:20] or b'HTTP/1.1 302' in response_bytes[:20]:
-          print("Detected redirect response")
-          is_redirect = True
+      # Decode chunked encoding if present
+      if b'Transfer-Encoding: chunked' in response_bytes:
+          chunks = []
+          while True:
+              chunk_size_line, _, rest = response_bytes.partition(b'\r\n')
+              if not chunk_size_line:
+                  break
+              chunk_size = int(chunk_size_line, 16)
+              if chunk_size == 0:
+                  break
+              chunk, _, rest = rest.partition(b'\r\n')
+              chunks.append(chunk[:chunk_size])
+              response_bytes = rest
+          response_bytes = b''.join(chunks)
+
+      # Check for redirects (301/302)
+      response_str = response_bytes.decode('utf-8', errors='ignore')
+      status_line = response_str.split('\r\n')[0]
+      if status_line:
+          status_code = int(status_line.split()[1])
+          if status_code in (301, 302):
+              location_header = [line for line in response_str.split('\r\n') if line.lower().startswith('location:')]
+              if location_header:
+                  new_url = location_header[0].split(' ', 1)[1].strip()
+                  URI = new_url  # Update URI to follow redirect
+                  break  # Exit loop to reprocess the new URI
+
+      # ~~~~ END CODE INSERT ~~~~ check
 
       # Send the response to the client
+      # ~~~~ INSERT CODE ~~~~
       clientSocket.sendall(response_bytes)
+      # ~~~~ END CODE INSERT ~~~~
 
       # Create a new file in the cache for the requested file.
       cacheDir, file = os.path.split(cacheLocation)
       print ('cached directory ' + cacheDir)
       if not os.path.exists(cacheDir):
         os.makedirs(cacheDir)
-      
+      cacheFile = open(cacheLocation, 'wb')
+
       # Save origin server response in the cache file
-      # Only cache 200 OK responses and redirects
-      status_code_match = re.search(rb'HTTP/1.1 (\d+)', response_bytes)
-      if status_code_match:
-          status_code = int(status_code_match.group(1))
-          if status_code == 200 or is_redirect:
-              with open(cacheLocation, 'wb') as cacheFile:
-                  cacheFile.write(response_bytes)
-              print(f"Cached response with status code {status_code}")
-          else:
-              print(f"Not caching response with status code {status_code}")
-      
-      print ('Response handled')
+      # ~~~~ INSERT CODE ~~~~
+      cacheFile.write(response_bytes)
+      # ~~~~ END CODE INSERT ~~~~
+      cacheFile.close()
+      print ('cache file closed')
 
       # finished communicating with origin server - shutdown socket writes
       print ('origin response received. Closing sockets')
@@ -230,15 +259,8 @@ while True:
        
       clientSocket.shutdown(socket.SHUT_WR)
       print ('client socket shutdown for writing')
-    except socket.timeout:
-      print("Connection to origin server timed out")
-      clientSocket.sendall(b"HTTP/1.1 504 Gateway Timeout\r\n\r\nConnection to origin server timed out")
-    except socket.gaierror:
-      print("DNS resolution failed for: " + hostname)
-      clientSocket.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\nFailed to resolve hostname")
     except OSError as err:
       print ('origin server request failed. ' + err.strerror)
-      clientSocket.sendall(f"HTTP/1.1 502 Bad Gateway\r\n\r\nOrigin server request failed: {err.strerror}".encode())
 
   try:
     clientSocket.close()
